@@ -1,8 +1,21 @@
 name: Publish to npm
-
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag (optional, defaults to sha)'
+        required: false
+        type: string
 
 jobs:
   publish:
