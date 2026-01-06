@@ -108,6 +108,13 @@ The gateway exposes two API endpoints:
 | `gemini-3-flash` | Gemini | 1M | 16K | ✓ |
 | `gemini-3-pro-high` | Gemini | 1M | 16K | ✓ |
 | `gemini-3-pro-low` | Gemini | 1M | 16K | ✓ |
+| `gemini-3-pro-image` | Gemini | 1M | 16K | ✓ |
+| `gemini-2.5-pro` | Gemini | 1M | 16K | ✓ |
+| `gemini-2.5-flash` | Gemini | 1M | 16K | ✓ |
+| `gemini-2.5-flash-thinking` | Gemini | 1M | 16K | ✓ |
+| `gemini-2.5-flash-lite` | Gemini | 1M | 8K | ✗ |
+
+> **Note**: Model availability depends on your Antigravity account. Run `curl http://localhost:8080/v1/models` to see your available models.
 
 ---
 
