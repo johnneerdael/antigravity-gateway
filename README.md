@@ -375,7 +375,7 @@ model_list:
       stream: true
 ```
 
-> **Note:** The `model_info` section tells LiteLLM about each model's capabilities. The proxy internally caps Gemini output at 16,384 tokens.
+> **Note:** The `model_info` section tells LiteLLM about each model's capabilities. The proxy internally caps Gemini output at 16,384 tokens. The `openai/` prefix works because the proxy supports both OpenAI (`/v1/chat/completions`) and Anthropic (`/v1/messages`) API formats.
 
 ### Docker Compose with LiteLLM
 
@@ -503,8 +503,34 @@ curl "http://localhost:8080/account-limits?format=table"
 | `/health` | GET | Health check |
 | `/account-limits` | GET | Account status and quota limits (add `?format=table` for ASCII table) |
 | `/v1/messages` | POST | Anthropic Messages API |
+| `/v1/chat/completions` | POST | OpenAI Chat Completions API (compatible with LiteLLM `openai/` prefix) |
 | `/v1/models` | GET | List available models |
 | `/refresh-token` | POST | Force token refresh |
+
+### OpenAI Compatibility
+
+The proxy supports both Anthropic and OpenAI API formats. Use whichever fits your client:
+
+**Anthropic format** (`/v1/messages`):
+```bash
+curl http://localhost:8080/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gemini-3-flash", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 100}'
+```
+
+**OpenAI format** (`/v1/chat/completions`):
+```bash
+curl http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "gemini-3-flash", "messages": [{"role": "user", "content": "Hi"}], "max_tokens": 100}'
+```
+
+For LiteLLM, you can now use either prefix:
+```yaml
+# Both work:
+model: openai/gemini-3-flash      # Uses /v1/chat/completions
+model: anthropic/gemini-3-flash   # Uses /v1/messages
+```
 
 ---
 

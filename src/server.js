@@ -12,6 +12,11 @@ import { REQUEST_BODY_LIMIT } from './constants.js';
 import { AccountManager } from './account-manager/index.js';
 import { formatDuration } from './utils/helpers.js';
 import { logger } from './utils/logger.js';
+import {
+    convertOpenAIToAnthropic,
+    convertAnthropicToOpenAI,
+    convertAnthropicEventToOpenAI
+} from './format/openai-compat.js';
 
 // Parse fallback flag directly from command line args to avoid circular dependency
 const args = process.argv.slice(2);
@@ -658,6 +663,89 @@ app.post('/v1/messages', async (req, res) => {
                 error: {
                     type: errorType,
                     message: errorMessage
+                }
+            });
+        }
+    }
+});
+
+/**
+ * OpenAI-compatible Chat Completions endpoint
+ * POST /v1/chat/completions
+ */
+app.post('/v1/chat/completions', async (req, res) => {
+    try {
+        await ensureInitialized();
+
+        const openaiRequest = req.body;
+        const { model, messages, stream } = openaiRequest;
+
+        if (!messages || !Array.isArray(messages)) {
+            return res.status(400).json({
+                error: {
+                    message: 'messages is required and must be an array',
+                    type: 'invalid_request_error',
+                    code: 'invalid_messages'
+                }
+            });
+        }
+
+        const modelId = model || 'claude-3-5-sonnet-20241022';
+        if (accountManager.isAllRateLimited(modelId)) {
+            logger.warn(`[Server] All accounts rate-limited for ${modelId}. Resetting state for optimistic retry.`);
+            accountManager.resetAllRateLimits();
+        }
+
+        const anthropicRequest = convertOpenAIToAnthropic(openaiRequest);
+        logger.info(`[API] OpenAI-compat request for model: ${anthropicRequest.model}, stream: ${!!stream}`);
+
+        if (stream) {
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+            res.flushHeaders();
+
+            try {
+                const streamState = {};
+                for await (const event of sendMessageStream(anthropicRequest, accountManager, FALLBACK_ENABLED)) {
+                    const chunk = convertAnthropicEventToOpenAI(event, anthropicRequest.model, streamState);
+                    if (chunk) {
+                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                        if (res.flush) res.flush();
+                    }
+                }
+                res.write('data: [DONE]\n\n');
+                res.end();
+            } catch (streamError) {
+                logger.error('[API] OpenAI stream error:', streamError);
+                const { errorType, errorMessage } = parseError(streamError);
+                res.write(`data: ${JSON.stringify({
+                    error: { type: errorType, message: errorMessage }
+                })}\n\n`);
+                res.end();
+            }
+        } else {
+            const anthropicResponse = await sendMessage(anthropicRequest, accountManager, FALLBACK_ENABLED);
+            const openaiResponse = convertAnthropicToOpenAI(anthropicResponse, anthropicRequest.model);
+            res.json(openaiResponse);
+        }
+
+    } catch (error) {
+        logger.error('[API] OpenAI-compat error:', error);
+        const { errorType, statusCode, errorMessage } = parseError(error);
+
+        if (res.headersSent) {
+            res.write(`data: ${JSON.stringify({
+                error: { type: errorType, message: errorMessage }
+            })}\n\n`);
+            res.end();
+        } else {
+            res.status(statusCode).json({
+                error: {
+                    message: errorMessage,
+                    type: errorType,
+                    code: errorType
                 }
             });
         }
